@@ -61,10 +61,33 @@
     scene.background = null; // Transparent background to show the GIF
     scene.fog = new THREE.FogExp2(0x000000, 0.015);
     
-    // Add a pointlight to enhance the water effect - adjusted for text position
+    // Add multiple dynamic lights for sick awesome lighting on text
+    
+    // Main water light
     const waterLight = new THREE.PointLight(0x0088ff, 1.5, 20);
-    waterLight.position.set(0, -4, 2); // Moved up to match text position
+    waterLight.position.set(0, -4, 2);
     scene.add(waterLight);
+    
+    // Create spotlight from above - purple/blue
+    const spotLight = new THREE.SpotLight(0x6600ff, 2, 30, Math.PI / 6, 0.5, 1);
+    spotLight.position.set(0, 5, 5);
+    spotLight.lookAt(0, -4, 0);
+    scene.add(spotLight);
+    
+    // Add dramatic side lighting - teal
+    const sideLight1 = new THREE.PointLight(0x00ffcc, 1.5, 15);
+    sideLight1.position.set(-8, -2, 4);
+    scene.add(sideLight1);
+    
+    // Add dramatic side lighting - pink/magenta
+    const sideLight2 = new THREE.PointLight(0xff00cc, 1.5, 15);
+    sideLight2.position.set(8, -2, 4);
+    scene.add(sideLight2);
+    
+    // Add subtle rim light from back - bright blue
+    const rimLight = new THREE.PointLight(0x00ddff, 1, 10);
+    rimLight.position.set(0, -6, -5);
+    scene.add(rimLight);
     
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     const renderer = new THREE.WebGLRenderer({ 
@@ -187,11 +210,11 @@
         
         void main() {
           if (vType < 0.5) {
-            // Water spray/mist particles - soft, translucent
+            // Water spray/mist particles - soft, more translucent (increased by 30%)
             float distance = length(gl_PointCoord - vec2(0.5, 0.5));
             if (distance > 0.5) discard;
-            float opacity = vLife * 0.5; // More translucent as life decreases
-            gl_FragColor = vec4(vColor, opacity * (0.9 - distance * 1.0));
+            float opacity = vLife * 0.35; // Reduced by 30% from 0.5
+            gl_FragColor = vec4(vColor, opacity * (0.63 - distance * 0.7)); // Reduced by 30% from 0.9
           } else {
             // Water droplet particles - reflective with some refraction
             float distance = length(gl_PointCoord - vec2(0.5, 0.5));
@@ -250,7 +273,7 @@
       
       textBoundingBox.copy(textGeometry.boundingBox);
       
-      // Blue text material
+      // Sick awesome lighting on text - simpler but still holographic material
       const textMaterial = new THREE.MeshStandardMaterial({ 
         color: 0x0066ff,
         emissive: 0x003399,
@@ -450,20 +473,20 @@
             const normalizedLife = life[i];
             
             if (normalizedLife > 0.7) {
-              // Bright white/light blue (beginning of life)
-              colors[i3] = 0.8 + normalizedLife * 0.2;     // red (high)
-              colors[i3 + 1] = 0.9 + normalizedLife * 0.1; // green (very high)
+              // Bright white/light blue (beginning of life) - slightly brightened to compensate for transparency
+              colors[i3] = 0.85 + normalizedLife * 0.15;   // red (high)
+              colors[i3 + 1] = 0.95 + normalizedLife * 0.05; // green (very high)
               colors[i3 + 2] = 1.0;                        // blue (full)
             } else if (normalizedLife > 0.4) {
               // Fading to more blue as it disperses
-              colors[i3] = 0.6 + normalizedLife * 0.3;     // red (decreasing)
-              colors[i3 + 1] = 0.7 + normalizedLife * 0.3; // green (decreasing)
+              colors[i3] = 0.65 + normalizedLife * 0.3;    // red (decreasing)
+              colors[i3 + 1] = 0.75 + normalizedLife * 0.25; // green (decreasing)
               colors[i3 + 2] = 1.0;                        // blue stays full
             } else {
               // Becoming more transparent 
-              colors[i3] = 0.4 + normalizedLife * 0.4;     // red (low)
-              colors[i3 + 1] = 0.5 + normalizedLife * 0.4; // green (medium)
-              colors[i3 + 2] = 0.8 + normalizedLife * 0.2; // blue (still high)
+              colors[i3] = 0.45 + normalizedLife * 0.4;    // red (low)
+              colors[i3 + 1] = 0.55 + normalizedLife * 0.4; // green (medium)
+              colors[i3 + 2] = 0.85 + normalizedLife * 0.15; // blue (still high)
             }
           } else { // For water droplet particles
             // Water droplets maintain color but become more transparent
@@ -512,11 +535,42 @@
         // Subtle position wobble
         textMesh.position.y = Math.sin(clock.elapsedTime * 0.2) * 0.15;
         
-        // Make the water light shimmer and move slightly
+        // Simple color cycling for the text using HSL
+        const colorCycleTime = 20; // Complete cycle every 20 seconds
+        const hue = (clock.elapsedTime / colorCycleTime) % 1;
+        
+        // Set color using HSL (keeps saturation and lightness constant)
+        textMesh.material.color.setHSL(hue, 0.8, 0.5);
+        textMesh.material.emissive.setHSL(hue, 0.9, 0.3);
+        
+        // Make all the lights do sick awesome animations
+        
+        // Water light shimmer
         waterLight.intensity = 1.5 + Math.sin(clock.elapsedTime * 1.5) * 0.3;
         waterLight.position.x = Math.sin(clock.elapsedTime * 0.5) * 0.5;
-        // Keep light near text position
         waterLight.position.y = -4 + Math.cos(clock.elapsedTime * 0.4) * 0.3;
+        
+        // Spotlight dramatic pulsing
+        spotLight.intensity = 2 + Math.sin(clock.elapsedTime * 0.7) * 1.0;
+        spotLight.angle = (Math.PI / 6) + Math.sin(clock.elapsedTime * 0.3) * 0.05;
+        spotLight.position.x = Math.sin(clock.elapsedTime * 0.2) * 2;
+        
+        // Side lights color cycling
+        const hue1 = (clock.elapsedTime * 0.05) % 1;
+        const hue2 = ((clock.elapsedTime * 0.05) + 0.5) % 1;
+        sideLight1.color.setHSL(hue1, 1, 0.5);
+        sideLight2.color.setHSL(hue2, 1, 0.5);
+        
+        // Side lights orbit around the text
+        const orbitRadius = 8;
+        const orbitSpeed = 0.15;
+        sideLight1.position.x = Math.cos(clock.elapsedTime * orbitSpeed) * orbitRadius;
+        sideLight1.position.z = Math.sin(clock.elapsedTime * orbitSpeed) * orbitRadius;
+        sideLight2.position.x = Math.cos(clock.elapsedTime * orbitSpeed + Math.PI) * orbitRadius;
+        sideLight2.position.z = Math.sin(clock.elapsedTime * orbitSpeed + Math.PI) * orbitRadius;
+        
+        // Rim light pulsing effect
+        rimLight.intensity = 0.5 + Math.pow(Math.sin(clock.elapsedTime * 2), 2) * 3.0;
         
         // Animate thing instances
         thingInstances.forEach((thing, i) => {
