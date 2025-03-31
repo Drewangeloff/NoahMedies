@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>noahangeloff.com</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #000;
+      font-family: Arial, sans-serif;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    // Initialize Three.js scene
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.z = 20;
+
+    // Set up renderer
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0x404040);
+    scene.add(ambientLight);
+
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+    directionalLight.position.set(0, 1, 1).normalize();
+    scene.add(directionalLight);
+
+    // Text
+    const textObjects = [];
+    const fontLoader = new THREE.FontLoader();
+    
+    fontLoader.load('https://threejs.org/examples/fonts/helvetiker_bold.typeface.json', function(font) {
+      const textGeometry = new THREE.TextGeometry('noahangeloff.com', {
+        font: font,
+        size: 2,
+        height: 0.2,
+        curveSegments: 4,
+        bevelEnabled: false
+      });
+      
+      textGeometry.computeBoundingBox();
+      const textWidth = textGeometry.boundingBox.max.x - textGeometry.boundingBox.min.x;
+      
+      // Center the text
+      textGeometry.translate(-textWidth / 2, 0, 0);
+      
+      const textMaterial = new THREE.MeshPhongMaterial({ 
+        color: 0x00aaff,
+        specular: 0x00ffff,
+        shininess: 100 
+      });
+      
+      const textMesh = new THREE.Mesh(textGeometry, textMaterial);
+      scene.add(textMesh);
+      textObjects.push(textMesh);
+    });
+
+    // Create random objects
+    const objects = [];
+    const objectCount = 200;
+    const boundarySize = 15;
+    
+    function createRandomObject() {
+      // Random shape
+      let geometry;
+      const shapeType = Math.floor(Math.random() * 3);
+      
+      if (shapeType === 0) {
+        // Cube
+        const size = 0.4 + Math.random() * 0.8;
+        geometry = new THREE.BoxGeometry(size, size, size);
+      } else if (shapeType === 1) {
+        // Sphere
+        const radius = 0.3 + Math.random() * 0.5;
+        geometry = new THREE.SphereGeometry(radius, 8, 8);
+      } else {
+        // Tetrahedron
+        const radius = 0.4 + Math.random() * 0.6;
+        geometry = new THREE.TetrahedronGeometry(radius);
+      }
+      
+      // Random color with blue/cyan tendency
+      const hue = 0.5 + Math.random() * 0.2; // Blue to cyan hue range
+      const saturation = 0.7 + Math.random() * 0.3;
+      const lightness = 0.4 + Math.random() * 0.5;
+      
+      const color = new THREE.Color().setHSL(hue, saturation, lightness);
+      const material = new THREE.MeshPhongMaterial({ 
+        color: color,
+        shininess: 30,
+        specular: 0x333333
+      });
+      
+      const object = new THREE.Mesh(geometry, material);
+      
+      // Random position within boundaries
+      object.position.x = Math.random() * boundarySize * 2 - boundarySize;
+      object.position.y = Math.random() * boundarySize * 2 - boundarySize;
+      object.position.z = Math.random() * boundarySize - boundarySize / 2;
+      
+      // Random velocity
+      object.velocity = new THREE.Vector3(
+        (Math.random() - 0.5) * 0.1,
+        (Math.random() - 0.5) * 0.1,
+        (Math.random() - 0.5) * 0.1
+      );
+      
+      // Random rotation
+      object.rotation.x = Math.random() * Math.PI;
+      object.rotation.y = Math.random() * Math.PI;
+      object.rotation.z = Math.random() * Math.PI;
+      
+      // Random angular velocity
+      object.angularVelocity = new THREE.Vector3(
+        (Math.random() - 0.5) * 0.05,
+        (Math.random() - 0.5) * 0.05,
+        (Math.random() - 0.5) * 0.05
+      );
+      
+      scene.add(object);
+      objects.push(object);
+      
+      return object;
+    }
+    
+    // Create initial objects
+    for (let i = 0; i < objectCount; i++) {
+      createRandomObject();
+    }
+    
+    // Animation and physics
+    function animate() {
+      requestAnimationFrame(animate);
+      
+      // Update objects
+      objects.forEach(object => {
+        // Move according to velocity
+        object.position.x += object.velocity.x;
+        object.position.y += object.velocity.y;
+        object.position.z += object.velocity.z;
+        
+        // Rotate according to angular velocity
+        object.rotation.x += object.angularVelocity.x;
+        object.rotation.y += object.angularVelocity.y;
+        object.rotation.z += object.angularVelocity.z;
+        
+        // Bounce off boundaries
+        if (Math.abs(object.position.x) > boundarySize) {
+          object.velocity.x = -object.velocity.x;
+          object.position.x = Math.sign(object.position.x) * boundarySize;
+        }
+        
+        if (Math.abs(object.position.y) > boundarySize) {
+          object.velocity.y = -object.velocity.y;
+          object.position.y = Math.sign(object.position.y) * boundarySize;
+        }
+        
+        if (Math.abs(object.position.z) > boundarySize) {
+          object.velocity.z = -object.velocity.z;
+          object.position.z = Math.sign(object.position.z) * boundarySize;
+        }
+      });
+      
+      // Rotate text objects
+      textObjects.forEach(text => {
+        text.rotation.y = Math.sin(Date.now() * 0.001) * 0.2;
+      });
+      
+      renderer.render(scene, camera);
+    }
+    
+    // Handle window resize
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+    
+    // Start animation
+    animate();
+  </script>
+</body>
+</html>
