@@ -500,9 +500,17 @@
         waterGeometry.attributes.size.needsUpdate = true;
       }
       
-      // Rotate text slightly and update fire light position
+      // Rotate and wobble text slowly and update water light position
       if (textMesh) {
-        textMesh.rotation.y = Math.sin(clock.elapsedTime * 0.2) * 0.05;
+        // Slow rotation around Y axis
+        textMesh.rotation.y = clock.elapsedTime * 0.1;
+        
+        // Gentle wobble effect using sine waves with different frequencies
+        textMesh.rotation.x = Math.sin(clock.elapsedTime * 0.15) * 0.03;
+        textMesh.rotation.z = Math.sin(clock.elapsedTime * 0.1) * 0.02;
+        
+        // Subtle position wobble
+        textMesh.position.y = Math.sin(clock.elapsedTime * 0.2) * 0.15;
         
         // Make the water light shimmer and move slightly
         waterLight.intensity = 1.5 + Math.sin(clock.elapsedTime * 1.5) * 0.3;
