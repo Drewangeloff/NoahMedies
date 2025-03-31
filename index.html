@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MEDS Particle Effects</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #000;
+      font-family: Arial, sans-serif;
+    }
+    canvas {
+      display: block;
+      position: relative;
+      z-index: 1;
+    }
+    #info {
+      position: absolute;
+      bottom: 20px;
+      width: 100%;
+      text-align: center;
+      color: white;
+      font-size: 12px;
+      z-index: 2;
+    }
+    #background {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 0;
+      opacity: 0.65;
+    }
+  </style>
+</head>
+<body>
+  <img id="background" src="capy.gif" alt="Capybara GIF background">
+  <div id="info">Click and drag to rotate | Scroll to zoom</div>
+  <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.154.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.154.0/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+    import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
+    import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+
+    // Scene setup
+    const scene = new THREE.Scene();
+    scene.background = null; // Transparent background to show the GIF
+    scene.fog = new THREE.FogExp2(0x000000, 0.015);
+    
+    // Add a pointlight to enhance the water effect - adjusted for text position
+    const waterLight = new THREE.PointLight(0x0088ff, 1.5, 20);
+    waterLight.position.set(0, -4, 2); // Moved up to match text position
+    scene.add(waterLight);
+    
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ 
+      antialias: true,
+      alpha: true // Enable transparency
+    });
+    
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    document.body.appendChild(renderer.domElement);
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0x404040);
+    scene.add(ambientLight);
+
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+    directionalLight.position.set(1, 1, 1);
+    scene.add(directionalLight);
+
+    // Camera position - adjusted to view text at bottom
+    camera.position.z = 15;
+    camera.position.y = -2;
+
+    // Controls
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+
+    // Particle types
+    const PARTICLE_TYPE = {
+      SPRAY: 0, // Water spray/mist (was SMOKE)
+      DROPLET: 1 // Water droplets (was SPARK)
+    };
+    
+    // Water particles
+    const waterCount = 10000;
+    const waterGeometry = new THREE.BufferGeometry();
+    const waterPositions = new Float32Array(waterCount * 3);
+    const waterColors = new Float32Array(waterCount * 3);
+    const waterSizes = new Float32Array(waterCount);
+    const waterTypes = new Float32Array(waterCount);
+    const waterLife = new Float32Array(waterCount);
+    const waterVelocity = new Float32Array(waterCount * 3);
+    
+    // Initialize water particles with random positions
+    for (let i = 0; i < waterCount; i++) {
+      const i3 = i * 3;
+      waterPositions[i3] = (Math.random() - 0.5) * 30;
+      waterPositions[i3 + 1] = (Math.random() - 0.5) * 30;
+      waterPositions[i3 + 2] = (Math.random() - 0.5) * 30;
+      
+      // Water particles with different types
+      const isSpray = Math.random() > 0.15; // 85% chance for spray, 15% for droplets
+      waterTypes[i] = isSpray ? PARTICLE_TYPE.SPRAY : PARTICLE_TYPE.DROPLET;
+      
+      // Random initial color in water spectrum (will evolve over time)
+      // Initialize as bright blue/white - will fade to deeper blues
+      if (isSpray) {
+        // Water spray/mist - light blue white
+        waterColors[i3] = 0.8 + Math.random() * 0.2;     // red (high but not full)
+        waterColors[i3 + 1] = 0.9 + Math.random() * 0.1; // green (very high)
+        waterColors[i3 + 2] = 1.0;                       // blue (full)
+        waterSizes[i] = 0.4 + Math.random() * 0.8;       // Mist particles
+      } else {
+        // Water droplet colors - more reflective/transparent
+        waterColors[i3] = 0.9 + Math.random() * 0.1;     // red (very high)
+        waterColors[i3 + 1] = 0.9 + Math.random() * 0.1; // green (very high)
+        waterColors[i3 + 2] = 1.0;                       // blue (full)
+        waterSizes[i] = 0.1 + Math.random() * 0.2;       // Small water droplets
+      }
+      
+      // Random initial life
+      waterLife[i] = Math.random();
+      
+      // Random velocity - water moves differently than fire
+      waterVelocity[i3] = (Math.random() - 0.5) * 0.02;
+      waterVelocity[i3 + 1] = 0.01 + Math.random() * 0.04; // Upward spray with more force
+      waterVelocity[i3 + 2] = (Math.random() - 0.5) * 0.02;
+    }
+    
+    waterGeometry.setAttribute('position', new THREE.BufferAttribute(waterPositions, 3));
+    waterGeometry.setAttribute('color', new THREE.BufferAttribute(waterColors, 3));
+    waterGeometry.setAttribute('size', new THREE.BufferAttribute(waterSizes, 1));
+    waterGeometry.setAttribute('type', new THREE.BufferAttribute(waterTypes, 1));
+    waterGeometry.setAttribute('life', new THREE.BufferAttribute(waterLife, 1));
+
+    // Custom shader material for water particles
+    const waterMaterial = new THREE.ShaderMaterial({
+      vertexShader: `
+        attribute float size;
+        attribute float type;
+        attribute float life;
+        varying vec3 vColor;
+        varying float vType;
+        varying float vLife;
+        
+        void main() {
+          vColor = color;
+          vType = type;
+          vLife = life;
+          
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          
+          // Different size handling based on type
+          if (vType < 0.5) {
+            // Water spray/mist
+            gl_PointSize = size * (150.0 / -mvPosition.z) * (0.4 + 0.6 * vLife);
+          } else {
+            // Water droplets
+            gl_PointSize = size * (250.0 / -mvPosition.z) * (0.6 + 0.4 * vLife);
+          }
+          
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vColor;
+        varying float vType;
+        varying float vLife;
+        
+        void main() {
+          if (vType < 0.5) {
+            // Water spray/mist particles - soft, translucent
+            float distance = length(gl_PointCoord - vec2(0.5, 0.5));
+            if (distance > 0.5) discard;
+            float opacity = vLife * 0.5; // More translucent as life decreases
+            gl_FragColor = vec4(vColor, opacity * (0.9 - distance * 1.0));
+          } else {
+            // Water droplet particles - reflective with some refraction
+            float distance = length(gl_PointCoord - vec2(0.5, 0.5));
+            if (distance > 0.5) discard;
+            
+            // Add reflection highlight
+            vec3 highlight = vColor;
+            if (distance < 0.2) {
+              highlight = mix(vec3(1.0), vColor, distance * 5.0); // White center
+            }
+            
+            // More transparent at edges to simulate water droplet refraction
+            float edgeTransparency = 0.5 - distance;
+            float alpha = vLife * mix(1.0, edgeTransparency, distance * 2.0);
+            
+            gl_FragColor = vec4(highlight, alpha);
+          }
+        }
+      `,
+      transparent: true,
+      vertexColors: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+
+    const waterSystem = new THREE.Points(waterGeometry, waterMaterial);
+    scene.add(waterSystem);
+
+    // Load font and create text
+    const fontLoader = new FontLoader();
+    let textMesh;
+    let emissionPoints = [];
+    let textBoundingBox = new THREE.Box3();
+    
+    fontLoader.load('https://unpkg.com/three@0.154.0/examples/fonts/helvetiker_bold.typeface.json', function(font) {
+      const textGeometry = new TextGeometry('MEDS', {
+        font: font,
+        size: 4.5, // Reduced by 10% from 5
+        height: 0.7, // Reduced proportionally
+        curveSegments: 12,
+        bevelEnabled: true,
+        bevelThickness: 0.2,
+        bevelSize: 0.05,
+        bevelOffset: 0,
+        bevelSegments: 5
+      });
+      
+      textGeometry.computeBoundingBox();
+      
+      // Position at bottom of screen instead of center, but slightly higher
+      const textHeight = textGeometry.boundingBox.max.y - textGeometry.boundingBox.min.y;
+      const textWidth = textGeometry.boundingBox.max.x - textGeometry.boundingBox.min.x;
+      
+      // Center horizontally, position at bottom with some margin, but raised a bit
+      textGeometry.translate(-textWidth / 2, -textHeight - 4, 0); // Moved up from -5 to -4
+      
+      textBoundingBox.copy(textGeometry.boundingBox);
+      
+      // Blue text material
+      const textMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0x0066ff,
+        emissive: 0x003399,
+        emissiveIntensity: 0.7,
+        metalness: 0.9,
+        roughness: 0.1
+      });
+      
+      textMesh = new THREE.Mesh(textGeometry, textMaterial);
+      scene.add(textMesh);
+
+      // Extract surface points for particle emission
+      const textPositionAttribute = textGeometry.getAttribute('position');
+      const count = textPositionAttribute.count;
+      
+      // Sample vertices to create emission points
+      for (let i = 0; i < count; i += 3) {
+        if (Math.random() > 0.7) { // Only use some vertices as emission points
+          const vertex = new THREE.Vector3();
+          vertex.fromBufferAttribute(textPositionAttribute, i);
+          emissionPoints.push(vertex);
+        }
+      }
+      
+      // Start animation
+      isAnimating = true;
+    });
+
+    // Animation variables
+    let isAnimating = false;
+    const MAX_LIFE = 2.0; // Maximum particle life in seconds
+    
+    // Array to store object instances
+    const thingInstances = [];
+    const THING_COUNT = 20;
+    
+    // Load OBJ model
+    const objLoader = new OBJLoader();
+    objLoader.load('thing.obj', (object) => {
+      // Create material for the objects
+      const thingMaterial = new THREE.MeshPhongMaterial({
+        color: 0x00ffff,
+        emissive: 0x006688,
+        shininess: 100,
+        specular: 0xffffff,
+        flatShading: true
+      });
+      
+      // Store original geometry for instancing
+      const originalGeometry = object.children[0].geometry;
+      
+      // Create 20 instances with random properties
+      for (let i = 0; i < THING_COUNT; i++) {
+        const mesh = new THREE.Mesh(originalGeometry, thingMaterial);
+        
+        // Random scale
+        const scale = 0.2 + Math.random() * 0.3;
+        mesh.scale.set(scale, scale, scale);
+        
+        // Random initial position focused more above the text (at bottom)
+        mesh.position.x = (Math.random() - 0.5) * 12;
+        mesh.position.y = Math.random() * 10 - 2; // Mostly above text, which is at bottom
+        mesh.position.z = (Math.random() - 0.5) * 6;
+        
+        // Random rotation
+        mesh.rotation.x = Math.random() * Math.PI * 2;
+        mesh.rotation.y = Math.random() * Math.PI * 2;
+        mesh.rotation.z = Math.random() * Math.PI * 2;
+        
+        // Add physics properties for animation
+        mesh.userData = {
+          velocity: new THREE.Vector3(
+            (Math.random() - 0.5) * 0.05,
+            (Math.random() - 0.5) * 0.05,
+            (Math.random() - 0.5) * 0.05
+          ),
+          angularVelocity: new THREE.Vector3(
+            (Math.random() - 0.5) * 0.05,
+            (Math.random() - 0.5) * 0.05,
+            (Math.random() - 0.5) * 0.05
+          ),
+          bounceTime: Math.random() * 1000
+        };
+        
+        scene.add(mesh);
+        thingInstances.push(mesh);
+      }
+    });
+    
+    // Handle window resize
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Function to reset a water particle
+    function resetParticle(index, forceType = null) {
+      const i3 = index * 3;
+      const types = waterGeometry.attributes.type.array;
+      const life = waterGeometry.attributes.life.array;
+      const positions = waterGeometry.attributes.position.array;
+      const velocities = waterVelocity;
+      const sizes = waterGeometry.attributes.size.array;
+      const colors = waterGeometry.attributes.color.array;
+      
+      // Choose a random emission point
+      if (emissionPoints.length > 0) {
+        const emissionPoint = emissionPoints[Math.floor(Math.random() * emissionPoints.length)];
+        
+        // Add small random offset
+        positions[i3] = emissionPoint.x + (Math.random() - 0.5) * 0.3;
+        positions[i3 + 1] = emissionPoint.y + (Math.random() - 0.5) * 0.3;
+        positions[i3 + 2] = emissionPoint.z + (Math.random() - 0.5) * 0.2;
+        
+        // Determine if water spray or droplet
+        const particleType = forceType !== null ? forceType : (Math.random() > 0.15 ? PARTICLE_TYPE.SPRAY : PARTICLE_TYPE.DROPLET);
+        types[index] = particleType;
+        
+        if (particleType === PARTICLE_TYPE.SPRAY) {
+          // Water spray/mist
+          colors[i3] = 0.8 + Math.random() * 0.2;     // red (high but not full)
+          colors[i3 + 1] = 0.9 + Math.random() * 0.1; // green (very high)
+          colors[i3 + 2] = 1.0;                       // blue (full)
+          sizes[index] = 0.4 + Math.random() * 0.8;   // Spray particles
+          
+          // Spray rises and spreads
+          velocities[i3] = (Math.random() - 0.5) * 0.07;
+          velocities[i3 + 1] = 0.05 + Math.random() * 0.08;
+          velocities[i3 + 2] = (Math.random() - 0.5) * 0.07;
+        } else {
+          // Water droplets - more reflective
+          colors[i3] = 0.9 + Math.random() * 0.1;     // red (very high)
+          colors[i3 + 1] = 0.9 + Math.random() * 0.1; // green (very high)
+          colors[i3 + 2] = 1.0;                       // blue (full)
+          sizes[index] = 0.1 + Math.random() * 0.2;   // Small water droplets
+          
+          // Droplets have more gravity and direction
+          velocities[i3] = (Math.random() - 0.5) * 0.12;
+          velocities[i3 + 1] = 0.08 + Math.random() * 0.18; // Initial upward velocity
+          velocities[i3 + 2] = (Math.random() - 0.5) * 0.12;
+        }
+        
+        // Reset life
+        life[index] = 1.0;
+      }
+    }
+
+    // Initialize particles
+    function initParticles() {
+      for (let i = 0; i < waterCount; i++) {
+        resetParticle(i);
+      }
+    }
+
+    // Clock for consistent animation
+    const clock = new THREE.Clock();
+    
+    // Animation loop
+    function animate() {
+      requestAnimationFrame(animate);
+      
+      const delta = clock.getDelta();
+      
+      if (isAnimating && emissionPoints.length > 0) {
+        const positions = waterGeometry.attributes.position.array;
+        const life = waterGeometry.attributes.life.array;
+        const types = waterGeometry.attributes.type.array;
+        const colors = waterGeometry.attributes.color.array;
+        
+        // Update each particle
+        for (let i = 0; i < waterCount; i++) {
+          const i3 = i * 3;
+          
+          // Update position based on velocity
+          positions[i3] += waterVelocity[i3];
+          positions[i3 + 1] += waterVelocity[i3 + 1];
+          positions[i3 + 2] += waterVelocity[i3 + 2];
+          
+          // Apply gravity to water droplets (not as much to spray)
+          if (types[i] >= 0.5) {  // Droplets
+            waterVelocity[i3 + 1] -= 0.003; // Gravity effect
+          } else {
+            waterVelocity[i3 + 1] -= 0.0005; // Slight gravity for spray
+          }
+          
+          // Add some water current/turbulence
+          positions[i3] += Math.sin(clock.elapsedTime * 0.8 + i * 0.05) * 0.015;
+          positions[i3 + 2] += Math.cos(clock.elapsedTime * 0.7 + i * 0.05) * 0.015;
+          
+          // Update life
+          life[i] -= delta * (types[i] < 0.5 ? 0.2 : 0.6); // Droplets have shorter lifetime
+          
+          // Update color based on life - blue fades/shifts
+          if (types[i] < 0.5) { // For spray/mist particles
+            // Calculate normalized life (1.0 = new, 0.0 = dead)
+            const normalizedLife = life[i];
+            
+            if (normalizedLife > 0.7) {
+              // Bright white/light blue (beginning of life)
+              colors[i3] = 0.8 + normalizedLife * 0.2;     // red (high)
+              colors[i3 + 1] = 0.9 + normalizedLife * 0.1; // green (very high)
+              colors[i3 + 2] = 1.0;                        // blue (full)
+            } else if (normalizedLife > 0.4) {
+              // Fading to more blue as it disperses
+              colors[i3] = 0.6 + normalizedLife * 0.3;     // red (decreasing)
+              colors[i3 + 1] = 0.7 + normalizedLife * 0.3; // green (decreasing)
+              colors[i3 + 2] = 1.0;                        // blue stays full
+            } else {
+              // Becoming more transparent 
+              colors[i3] = 0.4 + normalizedLife * 0.4;     // red (low)
+              colors[i3 + 1] = 0.5 + normalizedLife * 0.4; // green (medium)
+              colors[i3 + 2] = 0.8 + normalizedLife * 0.2; // blue (still high)
+            }
+          } else { // For water droplet particles
+            // Water droplets maintain color but become more transparent
+            const normalizedLife = life[i];
+            
+            // Simulate refraction/reflection
+            colors[i3] = 0.85 + normalizedLife * 0.15;     // red 
+            colors[i3 + 1] = 0.9 + normalizedLife * 0.1;   // green
+            colors[i3 + 2] = 1.0;                          // blue always highest
+            
+            // Add slight scale reduction as drops fall
+            waterGeometry.attributes.size.array[i] *= 0.998;
+          }
+          
+          // If particle is dead, reset it
+          if (life[i] <= 0) {
+            resetParticle(i);
+          }
+          
+          // Droplets may have random splashes
+          if (types[i] >= 0.5 && Math.random() > 0.98) {
+            // Sudden change in velocity to simulate splash
+            waterVelocity[i3] = (Math.random() - 0.5) * 0.1;
+            waterVelocity[i3 + 1] = -0.02 - Math.random() * 0.05; // Downward splash
+            waterVelocity[i3 + 2] = (Math.random() - 0.5) * 0.1;
+            life[i] *= 0.7; // Reduce life as it splashes
+          }
+        }
+        
+        // Update the particle attributes
+        waterGeometry.attributes.position.needsUpdate = true;
+        waterGeometry.attributes.life.needsUpdate = true;
+        waterGeometry.attributes.color.needsUpdate = true;
+        waterGeometry.attributes.size.needsUpdate = true;
+      }
+      
+      // Rotate text slightly and update fire light position
+      if (textMesh) {
+        textMesh.rotation.y = Math.sin(clock.elapsedTime * 0.2) * 0.05;
+        
+        // Make the water light shimmer and move slightly
+        waterLight.intensity = 1.5 + Math.sin(clock.elapsedTime * 1.5) * 0.3;
+        waterLight.position.x = Math.sin(clock.elapsedTime * 0.5) * 0.5;
+        // Keep light near text position
+        waterLight.position.y = -4 + Math.cos(clock.elapsedTime * 0.4) * 0.3;
+        
+        // Animate thing instances
+        thingInstances.forEach((thing, i) => {
+          // Update position based on velocity
+          thing.position.x += thing.userData.velocity.x;
+          thing.position.y += thing.userData.velocity.y;
+          thing.position.z += thing.userData.velocity.z;
+          
+          // Update rotation based on angular velocity
+          thing.rotation.x += thing.userData.angularVelocity.x;
+          thing.rotation.y += thing.userData.angularVelocity.y;
+          thing.rotation.z += thing.userData.angularVelocity.z;
+          
+          // Add bouncing motion - unique for each instance
+          const bounceFactor = Math.sin((clock.elapsedTime + thing.userData.bounceTime) * 3) * 0.05;
+          thing.position.y += bounceFactor;
+          
+          // Add spiral motion
+          const spiralX = Math.sin((clock.elapsedTime * 0.5) + (i / THING_COUNT) * Math.PI * 2) * 0.02;
+          const spiralZ = Math.cos((clock.elapsedTime * 0.5) + (i / THING_COUNT) * Math.PI * 2) * 0.02;
+          thing.position.x += spiralX;
+          thing.position.z += spiralZ;
+          
+          // Boundaries to keep objects near the text
+          // Adjusted to account for text at bottom
+          const bounds = {
+            x: 12,
+            y: 10, 
+            z: 6
+          };
+          
+          // Bounce off invisible boundaries
+          if (Math.abs(thing.position.x) > bounds.x) {
+            thing.userData.velocity.x *= -1;
+            thing.position.x = Math.sign(thing.position.x) * bounds.x;
+          }
+          
+          if (Math.abs(thing.position.y) > bounds.y) {
+            thing.userData.velocity.y *= -1;
+            thing.position.y = Math.sign(thing.position.y) * bounds.y;
+          }
+          
+          if (Math.abs(thing.position.z) > bounds.z) {
+            thing.userData.velocity.z *= -1;
+            thing.position.z = Math.sign(thing.position.z) * bounds.z;
+          }
+          
+          // Random velocity changes
+          if (Math.random() > 0.99) {
+            thing.userData.velocity.x += (Math.random() - 0.5) * 0.01;
+            thing.userData.velocity.y += (Math.random() - 0.5) * 0.01;
+            thing.userData.velocity.z += (Math.random() - 0.5) * 0.01;
+            
+            // Clamp maximum velocity
+            const maxVel = 0.08;
+            thing.userData.velocity.x = THREE.MathUtils.clamp(thing.userData.velocity.x, -maxVel, maxVel);
+            thing.userData.velocity.y = THREE.MathUtils.clamp(thing.userData.velocity.y, -maxVel, maxVel);
+            thing.userData.velocity.z = THREE.MathUtils.clamp(thing.userData.velocity.z, -maxVel, maxVel);
+          }
+        });
+      }
+      
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    // Start animation after a slight delay for everything to load
+    setTimeout(() => {
+      initParticles();
+      clock.start();
+      animate();
+    }, 500);
+  </script>
+</body>
+</html>
